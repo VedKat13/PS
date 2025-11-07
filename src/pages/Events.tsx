@@ -2,64 +2,140 @@ import EventCard from "@/components/EventCard";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Calendar } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 const Events = () => {
-  const upcomingEvents = [
-    {
-      title: "Annual Tech Symposium 2024",
-      description: "Join us for the biggest tech event of the year featuring industry leaders",
-      date: "March 15, 2024",
-      time: "10:00 AM",
-      location: "Main Auditorium, Building A",
-      participants: 245,
-      type: "event" as const,
-      skills: ["Networking", "Technology"],
-      expiresIn: "5 days",
-      status: "open" as const
-    },
-    {
-      title: "48-Hour Code Sprint",
-      description: "Build innovative solutions. Amazing prizes await!",
-      date: "March 22, 2024",
-      time: "9:00 AM",
-      location: "Computer Lab Complex",
-      participants: 189,
-      type: "hackathon" as const,
-      skills: ["JavaScript", "Python", "React"],
-      expiresIn: "12 days",
-      status: "open" as const
-    }
-  ];
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
 
-  const myEvents = [
-    {
-      title: "AI Workshop Series",
-      description: "Learn AI fundamentals through hands-on projects",
-      date: "March 18, 2024",
-      time: "2:00 PM",
-      location: "Online & Hybrid",
-      participants: 312,
-      type: "event" as const,
-      skills: ["Python", "TensorFlow"],
-      expiresIn: "8 days",
-      status: "open" as const
-    }
-  ];
+  console.log('Current user in Events:', currentUser);
 
-  const projects = [
-    {
-      title: "Sustainable Campus Initiative",
-      description: "Develop eco-friendly solutions for campus sustainability",
-      date: "Ongoing",
-      time: "Flexible",
-      location: "Environmental Science Building",
-      participants: 34,
-      type: "project" as const,
-      skills: ["Research", "Data Analysis"],
-      expiresIn: "2 days",
-      status: "closing" as const
+  // Fetch current user data to get userID
+  const { data: userData, isLoading: userLoading, error: userError } = useQuery({
+    queryKey: ['user', currentUser?.email],
+    queryFn: () => api.users.getByEmail(currentUser?.email || ''),
+    enabled: !!currentUser?.email,
+  });
+
+  console.log('User data in Events:', userData, 'Loading:', userLoading, 'Error:', userError);
+
+  // TEMPORARY: If userData exists but userid is missing, use a fallback
+  const userIdToPass = userData?.userid || userData?.userId || userData?.id || 6;
+  console.log('Final userId being passed in Events:', userIdToPass);
+
+  // Fetch all events - always fetch
+  const { data: allEvents = [], isLoading: eventsLoading, error: eventsError } = useQuery({
+    queryKey: ['events'],
+    queryFn: () => api.events.getAll(),
+  });
+
+  console.log('Events data:', allEvents, 'Is array?', Array.isArray(allEvents));
+  console.log('User data in Events:', userData);
+
+  // Fetch user's applications to check which events they've applied to
+  const { data: userApplications = [] } = useQuery({
+    queryKey: ['applications', userData?.userid],
+    queryFn: () => api.applications.getByUser(userData?.userid?.toString()),
+    enabled: !!userData?.userid,
+  });
+
+  // Get event IDs user has already applied to
+  const appliedEventIds = Array.isArray(userApplications) 
+    ? userApplications.map((app: any) => app.postid) 
+    : [];
+
+  console.log('User applications:', userApplications);
+  console.log('Applied event IDs:', appliedEventIds);
+
+  if (eventsLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-lg">Loading events...</div>
+      </div>
+    );
+  }
+
+  if (eventsError) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-lg text-red-500">Error loading events. Please check the backend.</div>
+      </div>
+    );
+  }
+
+  const upcomingEvents = Array.isArray(allEvents) ? allEvents.map((event: any, index: number) => {
+    const eventDate = event.eventDate || event.eventdate;
+    const formattedDate = eventDate ? new Date(eventDate).toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    }) : 'TBA';
+    
+    // Use postid if available, otherwise use index as fallback
+    const eventId = event.postid || (index + 1);
+    
+    // Check if this event was created by the current user
+    const isMyEvent = event.creatorId === userIdToPass || event.creatorid === userIdToPass;
+    
+    // Calculate expiration status and time remaining
+    const expirationDate = event.expirationTime ? new Date(event.expirationTime) : null;
+    const now = new Date();
+    const isExpired = expirationDate ? expirationDate < now : false;
+    
+    let expiresIn = '';
+    if (expirationDate && !isExpired) {
+      const diffMs = expirationDate.getTime() - now.getTime();
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      
+      if (diffDays > 0) {
+        expiresIn = `Expires in ${diffDays} day${diffDays > 1 ? 's' : ''}`;
+      } else if (diffHours > 0) {
+        expiresIn = `Expires in ${diffHours} hour${diffHours > 1 ? 's' : ''}`;
+      } else {
+        expiresIn = 'Expires soon';
+      }
     }
-  ];
+    
+    // Parse skills from requiredSkills string
+    const skillsArray = event.requiredSkills 
+      ? event.requiredSkills.split(',').map((s: string) => s.trim())
+      : [];
+    
+    return {
+      id: eventId,
+      title: event.title || event.Title,
+      description: event.description,
+      date: formattedDate,
+      time: event.eventTime || event.eventtime || "TBA",
+      location: event.location || "TBA",
+      participants: event.currentParticipants || event.participants || 0,
+      type: (event.eventType || "event") as "event" | "hackathon" | "project",
+      eventType: event.eventType || "event",
+      skills: skillsArray,
+      status: isExpired ? "expired" as const : "open" as const,
+      hasApplied: appliedEventIds.includes(eventId),
+      isCreator: isMyEvent,
+      expiresIn,
+      creatorName: event.creatorName,
+      createdAt: event.createdAt,
+      expirationTime: event.expirationTime,
+      requiredSkills: event.requiredSkills,
+      eventDate: event.eventDate,
+      eventStartTime: event.eventStartTime,
+      eventEndTime: event.eventEndTime,
+      venue: event.venue,
+      maxParticipants: event.maxParticipants,
+      currentParticipants: event.currentParticipants,
+      prizes: event.prizes,
+      organizerEmail: event.organizerEmail,
+      organizerPhone: event.organizerPhone,
+      imageUrl: event.imageUrl
+    };
+  }) : [];
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -70,7 +146,7 @@ const Events = () => {
             <Calendar className="h-4 w-4 mr-2" />
             Calendar View
           </Button>
-          <Button>
+          <Button onClick={() => navigate('/create-event')}>
             <Plus className="h-4 w-4 mr-2" />
             Create Event
           </Button>
@@ -87,35 +163,62 @@ const Events = () => {
 
         <TabsContent value="all" className="space-y-4">
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...upcomingEvents, ...projects].map((event, index) => (
-              <EventCard key={index} {...event} />
+            {upcomingEvents.map((event: any) => (
+              <EventCard 
+                key={event.id} 
+                {...event}
+                userId={userIdToPass}
+              />
             ))}
           </div>
         </TabsContent>
 
         <TabsContent value="my" className="space-y-4">
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {myEvents.map((event, index) => (
-              <EventCard key={index} {...event} />
-            ))}
+            {upcomingEvents
+              .filter((e: any) => e.isCreator)
+              .map((event: any) => (
+                <EventCard 
+                  key={event.id} 
+                  {...event}
+                  userId={userIdToPass}
+                />
+              ))}
           </div>
+          {upcomingEvents.filter((e: any) => e.isCreator).length === 0 && (
+            <div className="text-center py-12 text-muted-foreground">
+              <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium">No events created yet</p>
+              <p className="text-sm mt-2">Click "Create Event" to get started!</p>
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="hackathons" className="space-y-4">
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {upcomingEvents
-              .filter(e => e.type === "hackathon")
-              .map((event, index) => (
-                <EventCard key={index} {...event} />
+              .filter((e: any) => e.type === "hackathon")
+              .map((event: any) => (
+                <EventCard 
+                  key={event.id} 
+                  {...event}
+                  userId={userIdToPass}
+                />
               ))}
           </div>
         </TabsContent>
 
         <TabsContent value="projects" className="space-y-4">
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {projects.map((event, index) => (
-              <EventCard key={index} {...event} />
-            ))}
+            {upcomingEvents
+              .filter((e: any) => e.type === "project")
+              .map((event: any) => (
+                <EventCard 
+                  key={event.id} 
+                  {...event}
+                  userId={userIdToPass}
+                />
+              ))}
           </div>
         </TabsContent>
       </Tabs>
