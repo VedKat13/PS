@@ -165,7 +165,7 @@ export const syncFirebaseUserToDatabase = async (firebaseUser: any) => {
       const userData = {
         name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
         email: firebaseUser.email,
-        password: '', // No password for OAuth users
+        profilePhoto: firebaseUser.photoURL || null,
         branch: '', // Will be updated by user later
         bio: '',
         specialization: '',

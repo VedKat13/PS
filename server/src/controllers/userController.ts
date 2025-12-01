@@ -61,7 +61,7 @@ export const getUserByEmail = async (req: Request, res: Response) => {
 
 export const createUser = async (req: Request, res: Response) => {
   try {
-    const { name, email, password, branch, bio, specialization, academicYear } = req.body;
+    const { name, email, branch, bio, specialization, academicYear, profilePhoto } = req.body;
     
     // Convert academicYear to a number if it's a string like "3rd Year"
     let yearValue = academicYear;
@@ -72,8 +72,8 @@ export const createUser = async (req: Request, res: Response) => {
     }
     
     const [result]: any = await pool.query(
-      'INSERT INTO users (name, email, password, branch, bio, specialization, academicYear) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [name, email, password, branch, bio, specialization, yearValue]
+      'INSERT INTO users (name, email, branch, bio, specialization, academicYear, profilePhoto) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [name, email, branch || '', bio || '', specialization || '', yearValue, profilePhoto || null]
     );
     
     res.status(201).json({ 
