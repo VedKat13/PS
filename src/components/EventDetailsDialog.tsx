@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Calendar, Clock, User, Tag, Info, MapPin, Users, Award, Mail, Phone, Zap, Code, Briefcase } from "lucide-react";
 import { format } from "date-fns";
+import { useState } from "react";
+import ParticipantsDialog from "./ParticipantsDialog";
 
 interface EventDetailsDialogProps {
   open: boolean;
@@ -47,6 +49,7 @@ export default function EventDetailsDialog({
   hasApplied = false,
   onApply,
 }: EventDetailsDialogProps) {
+  const [participantsOpen, setParticipantsOpen] = useState(false);
   const skills = event.requiredSkills?.split(',').map(s => s.trim()) || [];
   
   const formatDate = (dateString?: string) => {
@@ -213,6 +216,13 @@ export default function EventDetailsDialog({
                     {event.currentParticipants || 0} / {event.maxParticipants} registered
                   </p>
                 </div>
+                {isCreator && (
+                  <div className="ml-4">
+                    <Button size="sm" variant="ghost" onClick={() => setParticipantsOpen(true)}>
+                      View Participants
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -339,6 +349,13 @@ export default function EventDetailsDialog({
           )}
         </div>
       </DialogContent>
+      {/* Participants dialog (creator-only) */}
+      <ParticipantsDialog
+        open={participantsOpen}
+        onOpenChange={setParticipantsOpen}
+        eventId={event.id || (event as any).postid}
+        requesterId={userId}
+      />
     </Dialog>
   );
 }

@@ -191,11 +191,32 @@ export const getApplicationsByUser = async (req: Request, res: Response) => {
 export const getApplicationsByEvent = async (req: Request, res: Response) => {
   try {
     const { eventId } = req.params;
+    // Require requester identification so only the event creator can view applicants
+    const requesterId = (req.headers['x-user-id'] as string) || (req.query.requesterId as string) || null;
+    if (!requesterId) {
+      return res.status(401).json({ error: 'Requester id required in header `X-User-Id` or query `requesterId`' });
+    }
+
+    // Verify event exists and get creator id
+    const [eventRows]: any = await pool.query(
+      'SELECT creatorid FROM eventposts WHERE postid = ?',
+      [eventId]
+    );
+
+    if (!eventRows || eventRows.length === 0) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+
+    const creatorId = eventRows[0].creatorid ?? eventRows[0].creatorId;
+    if (Number(creatorId) !== Number(requesterId)) {
+      return res.status(403).json({ error: 'Forbidden: only the event creator can view applicants' });
+    }
+
     const [rows] = await pool.query(
       `SELECT a.applicationid, a.status, a.userid,
-              u.name as applicantName, u.email as applicantEmail, u.branch
+              u.name as applicantName, u.email as applicantEmail, u.branch, a.name, a.phone, a.createdAt
        FROM applications a
-       JOIN users u ON a.userid = u.userId
+       LEFT JOIN users u ON a.userid = u.userId
        WHERE a.postid = ?
        ORDER BY a.applicationid DESC`,
       [eventId]

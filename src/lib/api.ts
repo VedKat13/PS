@@ -133,8 +133,11 @@ export const api = {
       fetch(`${API_BASE_URL}/applications/${id}`).then(handleResponse),
     getByUser: (userId: string) =>
       fetch(`${API_BASE_URL}/applications/user/${userId}`).then(handleResponse),
-    getByEvent: (eventId: string) =>
-      fetch(`${API_BASE_URL}/applications/event/${eventId}`).then(handleResponse),
+    // requesterId (optional): include the current user's id so backend can authorize creator-only access
+    getByEvent: (eventId: string, requesterId?: string | number) =>
+      fetch(`${API_BASE_URL}/applications/event/${eventId}${requesterId ? `?requesterId=${encodeURIComponent(String(requesterId))}` : ''}`, {
+        // also allow passing header if user prefers; callers currently pass requesterId as arg
+      }).then(handleResponse),
     create: (data: any) =>
       fetch(`${API_BASE_URL}/applications`, {
         method: 'POST',
